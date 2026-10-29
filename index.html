@@ -347,7 +347,7 @@ body {
   pointer-events: none;
 }
 
-/* Info button: left corner, 30px from left, 68px tall. */
+/* Info button stays visible, but a tap does nothing. */
 .hud-info {
   position: absolute;
   top: 20px;
@@ -358,7 +358,7 @@ body {
   padding: 0;
   border: none;
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   pointer-events: auto;
   line-height: 0;
   z-index: 11;
@@ -919,13 +919,13 @@ body {
   display: block;
 }
 
-/* Confetti rains over the finished scene, above the reward overlay. */
+/* Falling leaves over the finished scene, behind the dark reward screen. */
 .confetti-layer {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  z-index: 13;
+  z-index: 12;
 }
 
 .confetti-piece {
@@ -1304,17 +1304,13 @@ body {
           </div>
           <div class="hud-layer" id="hud-layer">
             <div class="hud-top-wrap">
-              <img class="hud-top" src="assets/Header.png" alt="The Makeover" draggable="false" />
+              <img class="hud-top" src="assets/Header.webp" alt="The Makeover" draggable="false" />
             </div>
             <button type="button" class="hud-info" aria-label="Info">
               <img src="assets/info_btn_LS.png" alt="" draggable="false" />
             </button>
             <img class="hud-meter" src="assets/EventSkuMeter.png" alt="" draggable="false" />
             <span class="hud-top-count" id="hud-top-count">100</span>
-            <!-- "How to play?" screen: dark layer + picture; the Close button stays on top of it. -->
-            <div class="info-overlay" id="info-overlay" role="dialog" aria-label="How to play" hidden>
-              <img class="info-screen" src="assets/info_screen.png" alt="How to play" draggable="false" />
-            </div>
             <button type="button" class="hud-close" aria-label="Close">
               <img src="assets/close_btn_LS.png" alt="" draggable="false" />
             </button>
@@ -1779,46 +1775,14 @@ body {
 })(window);
 
   </script>
-  <!-- Info button opens the "How to play?" overlay, Close button (or Esc) closes it. -->
+  <!-- The "i" button stays on screen but does nothing: there is no info screen. -->
   <script>
     (function () {
-      var hud = document.getElementById("hud-layer");
-      var overlay = document.getElementById("info-overlay");
       var infoBtn = document.querySelector(".hud-info");
-      var closeBtn = document.querySelector(".hud-close");
-      if (!hud || !overlay || !infoBtn || !closeBtn) return;
-
-      function isOpen() {
-        return !overlay.hidden;
-      }
-
-      function openInfo(event) {
-        if (event) event.stopPropagation();
-        overlay.hidden = false;
-        hud.classList.add("is-info-open");
-        // next frame so the fade-in transition runs
-        requestAnimationFrame(function () {
-          overlay.classList.add("is-visible");
-        });
-      }
-
-      function closeInfo(event) {
-        if (!isOpen()) return;
-        if (event) event.stopPropagation();
-        overlay.classList.remove("is-visible");
-        hud.classList.remove("is-info-open");
-        setTimeout(function () {
-          if (!overlay.classList.contains("is-visible")) overlay.hidden = true;
-        }, 250);
-      }
-
-      infoBtn.addEventListener("click", openInfo);
-      closeBtn.addEventListener("click", closeInfo);
-      // taps on the dark layer must not reach the game underneath
-      overlay.addEventListener("click", function (e) { e.stopPropagation(); });
-      overlay.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
-      document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape") closeInfo(e);
+      if (!infoBtn) return;
+      infoBtn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
       });
     })();
   </script>
@@ -1826,10 +1790,10 @@ body {
 (function () {
   "use strict";
 
-  /** Wall-clock length of one brush clean (pick-up + sweeping + lift-off). */
-  const WIPE_MS = 1000;
+  /** Wall-clock length of one trim. Short, so the snips read as quick cuts. */
+  const WIPE_MS = 700;
   /** Timeline, as parts of WIPE_MS. */
-  const BRUSH_PICKUP_END = 0.14; // shears lift off the icon and drop to the bottom of the area
+  const BRUSH_PICKUP_END = 0.08; // icon brush grows in place, right where it stood
   const BRUSH_SWEEP_END = 0.86; // side-to-side sweeping inside the local area
   /** From here the rest of the piece dissolves, gone exactly when the clean ends. */
   const BRUSH_FADE_START = 0.78;
@@ -1839,11 +1803,14 @@ body {
   const BRUSH_TRAIL_RADIUS_PX = 112 * 0.4 * 0.7;
   /** The brush only sweeps a local square around the number, in stage px. */
   const BRUSH_AREA_PX = 200;
-  /** Point on the brush picture (0–1) that touches the scene: middle of the bristles. */
-  const BRUSH_TIP = { x: 0.44, y: 0.86 };
-  /** Fewest / most side-to-side sweeps inside the local area. */
-  const BRUSH_MIN_SWEEPS = 3;
-  const BRUSH_MAX_SWEEPS = 8;
+  /** Blade tips, the point that bites the bush. The gold screw is the snip pivot. */
+  const BRUSH_TIP = { x: 0.16, y: 0.2 };
+  const SHEARS_PIVOT = { x: 0.47, y: 0.463 };
+  /** One open-and-close of the blades while trimming. */
+  const SNIP_MS = 110;
+  /** Fewest / most side-to-side cuts up the bush. */
+  const BRUSH_MIN_SWEEPS = 2;
+  const BRUSH_MAX_SWEEPS = 2;
 
   const FEATHER = 22;
   /** Blur radius of the soft fade where a piece meets its neighbour. */
@@ -1869,7 +1836,7 @@ body {
   const stateBImg = document.getElementById("state-b");
   const samEl = document.getElementById("sam");
   const hudTopCountEl = document.getElementById("hud-top-count");
-  rewardPopup.src = "assets/MakeOver_Reward_popup_INT.png";
+  rewardPopup.src = "assets/MakeOver_Reward_popup_INT.webp";
 
   /** Eight cleaning parts on the single scene. A tap on the reward screen starts it over. */
   const GAME_PIECES = [8];
@@ -1956,11 +1923,11 @@ body {
   });
 
   function applySceneArt(scene) {
-    stateAUrl = scene.dirty + "?v=2";
+    stateAUrl = scene.dirty;
     stateAImage.src = stateAUrl;
-    if (stateBImg) stateBImg.src = scene.clean + "?v=2";
+    if (stateBImg) stateBImg.src = scene.clean;
     bushMask = null;
-    bushImage.src = scene.clean + "?v=2";
+    bushImage.src = scene.clean;
   }
 
   applySceneArt(SCENES[sceneIndex]);
@@ -2133,23 +2100,22 @@ body {
   }
 
   /**
-   * Area where numbers may sit: the whole picture below the header. Width is
-   * not fenced off — pieces at the left and right edges keep their own centre.
+   * Numbers sit on the bushes, not on the sky, the lawn along the bottom,
+   * or the left and right edges of the scene.
    */
   function iconBounds(width, height) {
-    // Keep the whole number plate on screen now that the picture fills
-    // the screen edge to edge.
-    const minX = EDGE_PAD_PX + ICON_HALF_W_PX;
-    const maxX = width - EDGE_PAD_PX - ICON_HALF_W_PX;
-    // The header and HUD buttons are checked element by element (overlapsHud),
-    // so the free corners beside the header stay usable for numbers.
-    const minY = EDGE_PAD_PX + ICON_EXTENT_TOP_PX;
-    const maxY = height - EDGE_PAD_PX - ICON_EXTENT_BOTTOM_PX;
+    const minX = Math.max(EDGE_PAD_PX + ICON_HALF_W_PX, width * 0.15);
+    const maxX = width - minX;
+    const minY = Math.max(EDGE_PAD_PX + ICON_EXTENT_TOP_PX, height * 0.3);
+    const maxY = Math.min(
+      height - EDGE_PAD_PX - ICON_EXTENT_BOTTOM_PX,
+      height * 0.78
+    );
     return {
       minX,
-      maxX: Math.max(minX, maxX),
+      maxX: Math.max(minX + 40, maxX),
       minY,
-      maxY: Math.max(minY, maxY),
+      maxY: Math.max(minY + 40, maxY),
     };
   }
 
@@ -3480,10 +3446,45 @@ body {
   }
 
   /**
-   * Clears a piece: the icon's brush lifts off, sweeps side to side over a
-   * local area around the number kicking up dust clouds, and the rest of the
-   * piece dissolves as the brush finishes.
-   * opts.startRect = where the icon brush was on screen (stage px).
+   * Points scattered inside the piece. Each one becomes a hole that opens
+   * on its own, so the part thins out like a sieve of leaves.
+   */
+  function buildSieveHoles(polygon, bbox, seed) {
+    const spots = [];
+    const step = 12;
+    const rnd = mulberry32(seed * 97 + 13);
+    const x0 = bbox.minX - step;
+    const y0 = bbox.minY - step;
+    const x1 = bbox.maxX + step;
+    const y1 = bbox.maxY + step;
+    for (let y = y0; y <= y1; y += step) {
+      for (let x = x0; x <= x1; x += step) {
+        const p = {
+          x: x + (rnd() - 0.5) * step * 0.85,
+          y: y + (rnd() - 0.5) * step * 0.85,
+        };
+        if (!pointInPolygon(p, polygon)) continue;
+        spots.push({
+          x: p.x,
+          y: p.y,
+          rot: rnd() * Math.PI,
+          leaf: rnd() < 0.62,
+          grow: 0.75 + rnd() * 0.55,
+        });
+      }
+    }
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = (rnd() * (i + 1)) | 0;
+      const swap = spots[i];
+      spots[i] = spots[j];
+      spots[j] = swap;
+    }
+    return spots;
+  }
+
+  /**
+   * Clears a piece: the shears snip, and leaf-shaped holes open across the
+   * part until it is gone. opts.startRect = where the icon brush stood.
    */
   function startBrushWipe(cellId, onDone, opts) {
     const polygon = cellPolygons.get(cellId);
@@ -3524,6 +3525,8 @@ body {
     const brushH = BRUSH_SIZE_PX * aspect;
     const tipX = brushW * BRUSH_TIP.x;
     const tipY = brushH * BRUSH_TIP.y;
+    const pivotX = brushW * SHEARS_PIVOT.x;
+    const pivotY = brushH * SHEARS_PIVOT.y;
 
     // The brush never goes under Header.png: where the brushed area lies
     // below the header, the whole brush (handle included) stays under its
@@ -3589,8 +3592,9 @@ body {
     brushEl.draggable = false;
     brushEl.style.width = `${brushW}px`;
     brushEl.style.height = `${brushH}px`;
-    // Rotate around the bristles, not the middle of the picture.
-    brushEl.style.transformOrigin = `${tipX}px ${tipY}px`;
+    // Snip around the gold screw. translate() keeps the blade tips on the bush
+    // when the blades are open; each close swings them about that screw.
+    brushEl.style.transformOrigin = `${pivotX}px ${pivotY}px`;
     fxLayer.appendChild(brushEl);
 
     // Swept-away dust accumulates here and is punched out of the piece.
@@ -3600,13 +3604,11 @@ body {
     const sweptCtx = swept.getContext("2d");
 
     const stampRadius = BRUSH_TRAIL_RADIUS_PX;
-    const stamp = buildSpongeStamp(stampRadius);
-    // The bristles leave a wide, flat trail.
-    const stampW = stampRadius * 2.5;
-    const stampH = stampRadius * 1.7;
-    const stampStep = stampRadius * 0.3;
     // The route starts exactly where the icon brush stood.
     const plan = planBrushPath(polygon, area, startTip, stampRadius);
+    // Spots punched through the piece. They appear one after another and grow,
+    // so the part opens up like a sieve instead of being wiped away.
+    const holes = buildSieveHoles(polygon, bbox, cellId);
 
     let finished = false;
     let svgHidden = false;
@@ -3614,7 +3616,24 @@ body {
     let prevS = 0;
     let lastPuffAt = 0;
     let tilt = 0;
+    let snipWasClosing = false;
     const wipeClockStart = performance.now();
+
+    /** One bite: blades close fast, then open. justClosed is the frame they meet. */
+    function shearsSnip(dir) {
+      const phase = ((performance.now() - wipeClockStart) % SNIP_MS) / SNIP_MS;
+      const closing = phase < 0.34;
+      const bite = closing ? phase / 0.34 : 1 - (phase - 0.34) / 0.66;
+      const eased = bite * bite * (3 - 2 * bite);
+      const justClosed = snipWasClosing && !closing;
+      snipWasClosing = closing;
+      return {
+        angle: dir * eased * 26,
+        scale: 1 - eased * 0.08,
+        press: eased * 8,
+        justClosed,
+      };
+    }
 
     function wipeProgress() {
       return Math.min(
@@ -3641,38 +3660,55 @@ body {
       onDone();
     }
 
-    /** Stamp the bristle footprint along the path travelled since last frame. */
-    function sweepSegment(fromS, toS) {
-      const a = brushPathPoint(polygon, area, fromS, plan);
-      const b = brushPathPoint(polygon, area, toS, plan);
-      if (toS <= fromS) return b;
-      const steps = Math.max(
-        1,
-        Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / stampStep)
-      );
-      sweptCtx.globalCompositeOperation = "source-over";
-      for (let i = 1; i <= steps; i++) {
-        const p = brushPathPoint(polygon, area, fromS + (toS - fromS) * (i / steps), plan);
-        sweptCtx.drawImage(stamp, p.x - stampW / 2, p.y - stampH / 2, stampW, stampH);
-      }
-      return b;
+    /** Soft leaf-shaped or round hole. White punches the dirty picture away. */
+    function drawSieveHole(h, radius) {
+      if (radius < 0.8) return;
+      sweptCtx.save();
+      sweptCtx.translate(h.x, h.y);
+      sweptCtx.rotate(h.rot);
+      if (h.leaf) sweptCtx.scale(1.55, 0.62);
+      const g = sweptCtx.createRadialGradient(0, 0, radius * 0.15, 0, 0, radius);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.62, "rgba(255,255,255,0.96)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      sweptCtx.fillStyle = g;
+      sweptCtx.beginPath();
+      sweptCtx.arc(0, 0, radius, 0, Math.PI * 2);
+      sweptCtx.fill();
+      sweptCtx.restore();
     }
 
-    /** Leaves clipped off and thrown to the sides as the shears sweep. */
+    /** More holes as the trim goes on; each one then opens wider until they meet. */
+    function punchHoles(s) {
+      sweptCtx.clearRect(0, 0, width, height);
+      sweptCtx.globalCompositeOperation = "source-over";
+      const shown = Math.max(0, Math.min(1, s));
+      for (let i = 0; i < holes.length; i++) {
+        const born = holes.length <= 1 ? 0 : (i / holes.length) * 0.72;
+        const age = Math.max(0, Math.min(1, (shown - born) / 0.28));
+        if (age <= 0) continue;
+        drawSieveHole(holes[i], age * (10 + 9 * holes[i].grow));
+      }
+    }
+
+    function brushPoint(s) {
+      return brushPathPoint(polygon, area, s, plan);
+    }
+
+    /** A few clippings trail the blades between snips. */
     function emitPuffs(p) {
       const now = performance.now();
-      if (now - lastPuffAt < 35) return;
+      if (now - lastPuffAt < 120) return;
       lastPuffAt = now;
-      const atTurn = p.turn > 0.85;
-      const ahead = p.dir * (stampRadius * (0.3 + Math.random() * 0.6));
-      const spreadY = (Math.random() - 0.5) * stampRadius * 1.3;
-      spawnLeaves(vfxLayer, p.x + ahead, p.y + spreadY, { leaves: atTurn ? 4 : 2 });
+      const ahead = p.dir * (stampRadius * (0.2 + Math.random() * 0.45));
+      spawnLeaves(vfxLayer, p.x + ahead, p.y, { leaves: 1, side: p.dir });
     }
 
     function renderFrame() {
       const t = wipeProgress();
       const sNow = sweepProgress(t);
-      const p = sweepSegment(prevS, sNow);
+      punchHoles(sNow);
+      const p = brushPoint(sNow);
       prevS = sNow;
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3686,13 +3722,6 @@ body {
 
       ctx.globalCompositeOperation = "destination-out";
       ctx.drawImage(swept, 0, 0);
-
-      // The rest of the piece (outside the brushed area) dissolves by the end.
-      if (t > BRUSH_FADE_START) {
-        const f = smoothstep((t - BRUSH_FADE_START) / (1 - BRUSH_FADE_START));
-        ctx.fillStyle = `rgba(0,0,0,${f.toFixed(3)})`;
-        ctx.fillRect(0, 0, width, height);
-      }
       ctx.globalCompositeOperation = "source-over";
 
       redrawDust(softEdge);
@@ -3703,6 +3732,7 @@ body {
       let scale;
       let alpha = 1;
       let snip = 0;
+      let snipScale = 1;
       let targetTilt;
       if (t < BRUSH_PICKUP_END) {
         // Grows from icon size right where the icon brush stood, then the
@@ -3717,9 +3747,14 @@ body {
         bx = p.x;
         by = p.y;
         scale = 1;
-        targetTilt = p.dir * 22 * Math.sin(Math.PI * Math.min(1, p.turn * 1.15 + 0.1));
-        // Fast open/close wobble of the blades.
-        snip = Math.sin(performance.now() * 0.06) * 5;
+        targetTilt = p.dir * 12 * Math.sin(Math.PI * Math.min(1, p.turn * 1.15 + 0.1));
+        const bite = shearsSnip(p.dir);
+        snip = bite.angle;
+        snipScale = bite.scale;
+        by += bite.press;
+        if (bite.justClosed) {
+          spawnLeaves(vfxLayer, bx, by, { leaves: 4, side: p.dir });
+        }
         emitPuffs(p);
       } else {
         const k = smoothstep((t - BRUSH_SWEEP_END) / (1 - BRUSH_SWEEP_END));
@@ -3752,7 +3787,7 @@ body {
       brushEl.style.transform = [
         `translate(${(bx - tipX).toFixed(1)}px, ${(by - tipY).toFixed(1)}px)`,
         `rotate(${(tilt + snip).toFixed(2)}deg)`,
-        `scale(${scale.toFixed(3)})`,
+        `scale(${(scale * snipScale).toFixed(3)})`,
       ].join(" ");
       brushEl.style.opacity = alpha.toFixed(3);
 
@@ -3774,7 +3809,7 @@ body {
           6,
           Math.min(area.width, area.height) * 0.35
         );
-        playSpongeSparkles(bbox);
+        if (clearedCount + 1 < pieceCount) playSpongeSparkles(bbox);
         cleanup();
         return;
       }
@@ -4046,7 +4081,7 @@ body {
 
   /** Feature end screen (same MakeOver_Reward_popup_INT as Showcase 8 Parts). Tap restarts. */
   function showRewardScreen() {
-    rewardPopup.src = "assets/MakeOver_Reward_popup_INT.png";
+    rewardPopup.src = "assets/MakeOver_Reward_popup_INT.webp";
     rewardScreen.hidden = false;
     rewardOpen = true;
     requestAnimationFrame(() => {
@@ -4089,23 +4124,107 @@ body {
     window.setTimeout(() => layer.remove(), maxLife + 150);
   }
 
-  const LEAF_RAIN_COUNT = 70;
+  const LEAF_RAIN_COUNT = 54;
+  const FLOWER_COLORS = ["#ff7eb3", "#ffd23f", "#fff6ea", "#ff8a5b", "#e48bff", "#ff5d8f", "#ffe566"];
+  let leafRainLayer = null;
+  const endFxLayers = [];
+  const endFxTimers = [];
 
-  /** Green leaves drift down over the finished scene instead of confetti. */
+  function clearLeafRain() {
+    endFxTimers.splice(0).forEach((id) => window.clearTimeout(id));
+    endFxLayers.splice(0).forEach((layer) => layer.remove());
+    leafRainLayer = null;
+  }
+
+  /** One burst: flowers and leaves shoot out, then drop. */
+  function burstFirework(layer, x, y) {
+    const bits = 26;
+    for (let i = 0; i < bits; i++) {
+      const flower = i < 16;
+      const ang = (Math.PI * 2 * i) / bits + (Math.random() - 0.5) * 0.45;
+      const speed = 120 + Math.random() * 200;
+      const vx = Math.cos(ang) * speed;
+      const vy = Math.sin(ang) * speed - 70;
+      const gravity = 280 + Math.random() * 80;
+      const size = (flower ? 16 : 13) + Math.random() * 12;
+      const el = document.createElement("span");
+      el.style.position = "absolute";
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.width = `${size.toFixed(1)}px`;
+      el.style.height = `${(flower ? size * 0.72 : size).toFixed(1)}px`;
+      el.style.borderRadius = flower ? "80% 0 80% 0" : "0 100% 0 100%";
+      el.style.pointerEvents = "none";
+      if (flower) {
+        el.style.background = FLOWER_COLORS[(Math.random() * FLOWER_COLORS.length) | 0];
+      } else {
+        const colors = LEAF_COLORS[(Math.random() * LEAF_COLORS.length) | 0];
+        el.style.background = `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`;
+      }
+      layer.appendChild(el);
+
+      const spin = (Math.random() < 0.5 ? -1 : 1) * (200 + Math.random() * 280);
+      const dur = 1500 + Math.random() * 600;
+      const frames = [];
+      const steps = 10;
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const px = vx * t;
+        const py = vy * t + gravity * t * t;
+        frames.push({
+          transform:
+            `translate(-50%, -50%) translate(${px.toFixed(1)}px, ${py.toFixed(1)}px) rotate(${(spin * t).toFixed(1)}deg)`,
+          opacity: s === 0 ? 0 : t < 0.72 ? 1 : Math.max(0, 1 - (t - 0.72) / 0.28),
+          offset: t,
+        });
+      }
+      const anim = el.animate(frames, { duration: dur, easing: "linear", fill: "both" });
+      const done = () => el.remove();
+      anim.onfinish = done;
+      anim.oncancel = done;
+    }
+  }
+
+  /** Several bursts of flowers and leaves across the finished scene. */
+  function playFlowerFirework() {
+    const width = layoutWidth || getStageSize().width;
+    const height = layoutHeight || getStageSize().height;
+    const layer = document.createElement("div");
+    layer.className = "confetti-layer";
+    playArea.appendChild(layer);
+    endFxLayers.push(layer);
+    const points = [
+      { x: width * 0.22, y: height * 0.4 },
+      { x: width * 0.5, y: height * 0.3 },
+      { x: width * 0.78, y: height * 0.38 },
+      { x: width * 0.36, y: height * 0.52 },
+      { x: width * 0.64, y: height * 0.48 },
+    ];
+    points.forEach((p, i) => {
+      endFxTimers.push(window.setTimeout(() => burstFirework(layer, p.x, p.y), i * 120));
+    });
+  }
+
+  /**
+   * Leaves fall over the finished scene, and keep falling behind the reward
+   * screen until the scene starts again.
+   */
   function playConfetti() {
+    clearLeafRain();
     const width = layoutWidth || getStageSize().width;
     const height = layoutHeight || getStageSize().height;
 
     const layer = document.createElement("div");
     layer.className = "confetti-layer";
     playArea.appendChild(layer);
+    leafRainLayer = layer;
+    endFxLayers.push(layer);
 
-    let maxLife = 0;
     for (let i = 0; i < LEAF_RAIN_COUNT; i++) {
       const piece = document.createElement("span");
-      const w = 14 + Math.random() * 12; // 14-26px
-      const dur = 1600 + Math.random() * 1000;
-      const delay = Math.random() * 700;
+      const w = 14 + Math.random() * 12;
+      const dur = 1400 + Math.random() * 700;
+      const delay = Math.random() * 450;
 
       piece.className = "confetti-piece";
       piece.style.left = `${Math.random() * width}px`;
@@ -4113,23 +4232,19 @@ body {
       piece.style.height = `${w}px`;
       piece.style.setProperty("--fall-dur", `${dur}ms`);
       piece.style.setProperty("--fall-delay", `${delay}ms`);
-      piece.style.setProperty("--fall-dist", `${height * 1.25}px`);
-      piece.style.setProperty("--drift", `${(Math.random() - 0.5) * 260}px`);
+      piece.style.setProperty("--fall-dist", `${height * 1.35}px`);
+      piece.style.setProperty("--drift", `${(Math.random() - 0.5) * 180}px`);
 
       const colors = LEAF_COLORS[(Math.random() * LEAF_COLORS.length) | 0];
       const leaf = document.createElement("i");
       leaf.style.setProperty("--leaf-a", colors[0]);
       leaf.style.setProperty("--leaf-b", colors[1]);
-      leaf.style.setProperty("--spin-dur", `${900 + Math.random() * 900}ms`);
+      leaf.style.setProperty("--spin-dur", `${1400 + Math.random() * 1200}ms`);
       leaf.style.transform = `rotate(${(Math.random() * 90) | 0}deg)`;
       piece.appendChild(leaf);
-
+      piece.addEventListener("animationend", () => piece.remove());
       layer.appendChild(piece);
-      maxLife = Math.max(maxLife, dur + delay);
     }
-
-    window.setTimeout(() => layer.remove(), maxLife + 200);
-    return maxLife;
   }
 
   /**
@@ -4696,8 +4811,9 @@ body {
     if (celebrating || rewardOpen) return;
     celebrating = true;
     setSamHappy(true);
-    // End of the scene: only falling leaves. No spotlights, stars or sparkles.
+    // Leaves fall faster, with a firework of flowers and leaves. Both stay behind the reward screen.
     playConfetti();
+    playFlowerFirework();
     window.setTimeout(() => {
       clearCelebrate();
       celebrating = false;
@@ -4753,6 +4869,7 @@ body {
     fadeThroughBlack(() => {
       rewardScreen.hidden = true;
       rewardScreen.classList.remove("is-visible");
+      clearLeafRain();
       gameIndex = fromStart ? 0 : (gameIndex + 1) % GAME_PIECES.length;
       pieceCount = GAME_PIECES[gameIndex];
       sceneIndex = fromStart ? 0 : (sceneIndex + 1) % SCENES.length;
